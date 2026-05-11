@@ -46,6 +46,9 @@ contract TerralinkTest is Test {
         uint256 price = 250_000 * ONE_USDT;
 
         vm.prank(owner);
+        propertyNFT.approve(address(marketplace), tokenId);
+
+        vm.prank(owner);
         marketplace.listProperty(tokenId, price);
 
         vm.startPrank(buyer);
