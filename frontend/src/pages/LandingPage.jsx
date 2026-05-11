@@ -5,7 +5,9 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { PropertyCard } from '../components/property/PropertyCard';
-import { properties } from '../data/properties';
+import { EmptyState } from '../components/ui/empty-state';
+import { useProperties } from '../hooks/useProperties';
+import { fallbackImage } from '../lib/propertyMetadata';
 import { fadeUp, stagger } from '../lib/motion';
 
 function Skyline() {
@@ -28,6 +30,10 @@ function Skyline() {
 }
 
 export function LandingPage() {
+  const { properties, isLoading } = useProperties();
+  const featured = properties.slice(0, 3);
+  const heroProperty = properties[0];
+
   return (
     <div>
       <section className="relative -mt-24 flex min-h-screen items-center overflow-hidden px-4 pt-28 sm:px-6 lg:px-8">
@@ -55,20 +61,20 @@ export function LandingPage() {
           <motion.div variants={fadeUp} className="relative">
             <div className="absolute -inset-8 rounded-full bg-emerald-400/20 blur-3xl" />
             <Card className="relative overflow-hidden">
-              <img src={properties[2].image} alt="Luxury villa" className="h-80 w-full object-cover" />
+              <img src={heroProperty?.image || fallbackImage('GENESIS')} alt="Live property" className="h-80 w-full object-cover" />
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-400">Live asset</p>
-                    <p className="text-2xl font-black">{properties[2].title}</p>
+                    <p className="text-sm text-slate-400">Live Sepolia asset</p>
+                    <p className="text-2xl font-black">{heroProperty?.title || 'Awaiting first registered property'}</p>
                   </div>
-                  <Badge>88% funded</Badge>
+                  <Badge>{heroProperty?.stateLabel || 'Ready'}</Badge>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  {['$5.2M', '13.2%', '1,240'].map((value, index) => (
-                    <div key={value} className="rounded-xl bg-white/[.06] p-3">
+                  {[properties.length, properties.filter((item) => item.isListed).length, properties.filter((item) => item.hasPool).length].map((value, index) => (
+                    <div key={`${index}-${value}`} className="rounded-xl bg-white/[.06] p-3">
                       <p className="font-black">{value}</p>
-                      <p className="text-xs text-slate-500">{['Value', 'APY', 'Holders'][index]}</p>
+                      <p className="text-xs text-slate-500">{['Minted', 'Listed', 'Pools'][index]}</p>
                     </div>
                   ))}
                 </div>
@@ -80,10 +86,10 @@ export function LandingPage() {
 
       <section className="mx-auto grid max-w-7xl gap-4 px-4 py-16 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
         {[
-          ['$128M+', 'Protocol TVL'],
-          ['42', 'Tokenized properties'],
-          ['$2.7M', 'Rental distributions'],
-          ['99.98%', 'Escrow uptime'],
+          [properties.length, 'Tokenized properties'],
+          [properties.filter((item) => item.isListed).length, 'Active listings'],
+          [properties.filter((item) => item.hasPool).length, 'Fractional pools'],
+          [properties.filter((item) => item.hasRental).length, 'Rental agreements'],
         ].map(([value, label]) => (
           <Card key={label}><CardContent><p className="text-4xl font-black text-gradient">{value}</p><p className="mt-2 text-sm text-slate-400">{label}</p></CardContent></Card>
         ))}
@@ -98,7 +104,8 @@ export function LandingPage() {
           <Button asChild variant="outline"><Link to="/marketplace">View all</Link></Button>
         </div>
         <div className="grid gap-5 md:grid-cols-3">
-          {properties.slice(0, 3).map((property) => <PropertyCard key={property.id} property={property} />)}
+          {featured.map((property) => <PropertyCard key={property.id} property={property} />)}
+          {!isLoading && !featured.length && <div className="md:col-span-3"><EmptyState title="No Sepolia properties registered yet" description="Register a property to pin metadata to IPFS and mint the first live TERRALINK asset." /></div>}
         </div>
       </section>
 

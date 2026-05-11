@@ -25,24 +25,24 @@ export function PropertyCard({ property }) {
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-xs text-slate-500">Asset value</p>
-              <p className="text-2xl font-black text-white">{formatCurrency(property.price, true)}</p>
+              <p className="text-2xl font-black text-white">{property.price ? formatCurrency(property.price, true) : 'Unlisted'}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-slate-500">Projected APY</p>
-              <p className="text-xl font-black text-emerald-300">{property.apy}%</p>
+              <p className="text-xl font-black text-emerald-300">{property.apy || 0}%</p>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 text-sm text-slate-300">
-            <span className="flex items-center gap-1"><BedDouble className="h-4 w-4" />{property.beds}</span>
-            <span className="flex items-center gap-1"><Bath className="h-4 w-4" />{property.baths}</span>
-            <span className="flex items-center gap-1"><Ruler className="h-4 w-4" />{property.sqft.toLocaleString()}</span>
+            <span className="flex items-center gap-1"><BedDouble className="h-4 w-4" />{property.beds || '-'}</span>
+            <span className="flex items-center gap-1"><Bath className="h-4 w-4" />{property.baths || '-'}</span>
+            <span className="flex items-center gap-1"><Ruler className="h-4 w-4" />{property.sqft ? property.sqft.toLocaleString() : '-'}</span>
           </div>
           <div>
             <div className="mb-2 flex justify-between text-xs text-slate-400">
               <span>Funding progress</span>
-              <span>{property.funded}%</span>
+              <span>{property.funded || 0}%</span>
             </div>
-            <Progress value={property.funded} />
+            <Progress value={property.funded || 0} />
           </div>
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-200">
             <ShieldCheck className="h-4 w-4" />

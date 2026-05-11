@@ -12,13 +12,14 @@ export function useIpfsUpload() {
     try {
       setStatus('uploading');
       setProgress(8);
-      const uploadedImageCid = await uploadFilesToPinata(files, setProgress);
-      setImageCid(uploadedImageCid);
+      const uploadedImages = await uploadFilesToPinata(files, setProgress);
+      setImageCid(uploadedImages.primaryCid);
 
       const metadata = {
         name: values.name,
         description: values.description,
-        image: ipfsUrl(uploadedImageCid),
+        image: `ipfs://${uploadedImages.primaryCid}`,
+        images: uploadedImages.cids.map((cid) => `ipfs://${cid}`),
         properties: {
           location: values.location,
           valuation: values.valuation,
@@ -26,6 +27,7 @@ export function useIpfsUpload() {
           bedrooms: values.bedrooms,
           bathrooms: values.bathrooms,
           legalHash: values.legalHash,
+          images: uploadedImages.cids.map(ipfsUrl),
         },
       };
 
@@ -33,7 +35,7 @@ export function useIpfsUpload() {
       setMetadataCid(uploadedMetadataCid);
       setStatus('success');
       toast.success('Metadata pinned to IPFS');
-      return { imageCid: uploadedImageCid, metadataCid: uploadedMetadataCid };
+      return { imageCid: uploadedImages.primaryCid, imageCids: uploadedImages.cids, metadataCid: uploadedMetadataCid };
     } catch (error) {
       setStatus('error');
       toast.error(error.message);

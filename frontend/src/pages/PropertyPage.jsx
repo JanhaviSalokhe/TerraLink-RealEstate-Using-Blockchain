@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Activity, ArrowRight, Banknote, Building2, CalendarClock, ExternalLink, ShieldCheck, TrendingUp } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -7,9 +7,10 @@ import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
 import { TransactionModal } from '../components/web3/TransactionModal';
 import { PortfolioChart } from '../components/charts/PortfolioChart';
-import { activity, properties } from '../data/properties';
+import { EmptyState } from '../components/ui/empty-state';
 import { formatCurrency, shortAddress } from '../lib/utils';
 import { useProtocolActions } from '../hooks/useProtocolActions';
+import { useProperty } from '../hooks/useProperties';
 import toast from 'react-hot-toast';
 
 export function PropertyPage() {
@@ -18,7 +19,7 @@ export function PropertyPage() {
   const [txOpen, setTxOpen] = useState(false);
   const [txStatus, setTxStatus] = useState('idle');
   const { approveMarketplace, approveRental, approveFractional, buyProperty, acceptRentalAgreement, investInProperty, hash } = useProtocolActions();
-  const property = useMemo(() => properties.find((item) => item.id === id) || properties[0], [id]);
+  const { property, isLoading, error } = useProperty(id);
 
   async function runAction(action) {
     setTxOpen(true);
@@ -34,11 +35,30 @@ export function PropertyPage() {
     }
   }
 
+  if (!property && !isLoading) {
+    return (
+      <section className="mx-auto max-w-5xl px-4 pb-16 sm:px-6 lg:px-8">
+        <EmptyState title="Property not found on Sepolia" description={error || `No PropertyRegistered event was found for token ${id}. Check VITE_DEPLOYMENT_BLOCK or register a property first.`} />
+      </section>
+    );
+  }
+
+  if (!property) {
+    return <section className="mx-auto max-w-7xl px-4 pb-16 text-slate-400 sm:px-6 lg:px-8">Loading on-chain property...</section>;
+  }
+
+  const events = [
+    { type: 'Registered', hash: property.metadataURI, value: property.stateLabel, time: property.createdAt ? new Date(property.createdAt * 1000).toLocaleDateString() : 'Sepolia' },
+    property.isListed && { type: 'Listed', hash: `Seller ${shortAddress(property.listing.seller)}`, value: formatCurrency(property.price), time: 'Marketplace' },
+    property.hasPool && { type: 'Fractional pool', hash: `${property.funded}% funded`, value: formatCurrency(property.totalRaised), time: 'Pool live' },
+    property.hasRental && { type: 'Rental agreement', hash: `Tenant ${shortAddress(property.rental.tenant)}`, value: formatCurrency(property.rent), time: property.rental.active ? 'Active' : 'Open' },
+  ].filter(Boolean);
+
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 pb-16 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
       <div className="space-y-6">
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[.04]">
-          <img src={property.gallery[selected]} alt={property.title} className="h-[520px] w-full object-cover" />
+          <img src={property.gallery[selected] || property.image} alt={property.title} className="h-[520px] w-full object-cover" />
           <div className="grid grid-cols-3 gap-2 p-2">
             {property.gallery.map((image, index) => (
               <button key={image} onClick={() => setSelected(index)} className={`overflow-hidden rounded-xl border ${selected === index ? 'border-emerald-300' : 'border-white/10'}`}>
@@ -57,11 +77,11 @@ export function PropertyPage() {
               </div>
               <div className="text-left md:text-right">
                 <p className="text-sm text-slate-400">Asset value</p>
-                <p className="text-4xl font-black text-gradient">{formatCurrency(property.price)}</p>
+                <p className="text-4xl font-black text-gradient">{property.price ? formatCurrency(property.price) : 'Unlisted'}</p>
               </div>
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-4">
-              {[['Beds', property.beds], ['Baths', property.baths], ['Sqft', property.sqft.toLocaleString()], ['APY', `${property.apy}%`]].map(([label, value]) => (
+              {[['Beds', property.beds || '-'], ['Baths', property.baths || '-'], ['Sqft', property.sqft ? property.sqft.toLocaleString() : '-'], ['State', property.stateLabel]].map(([label, value]) => (
                 <div key={label} className="rounded-xl bg-white/[.05] p-4">
                   <p className="text-sm text-slate-500">{label}</p>
                   <p className="text-xl font-black">{value}</p>
@@ -78,8 +98,8 @@ export function PropertyPage() {
           <Card>
             <CardHeader><CardTitle>Blockchain Activity</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {activity.map((item) => (
-                <div key={item.hash} className="flex items-center justify-between rounded-xl bg-white/[.05] p-3">
+              {events.map((item) => (
+                <div key={`${item.type}-${item.hash}`} className="flex items-center justify-between rounded-xl bg-white/[.05] p-3">
                   <div className="flex items-center gap-3">
                     <Activity className="h-4 w-4 text-emerald-300" />
                     <div><p className="font-bold">{item.type}</p><p className="text-xs text-slate-500">{item.hash}</p></div>
@@ -104,10 +124,11 @@ export function PropertyPage() {
               <Progress value={property.funded} />
             </div>
             <div className="grid gap-3">
-              <Button variant="outline" onClick={() => runAction(() => approveMarketplace(property.price))}>Approve mUSDT</Button>
-              <Button onClick={() => runAction(() => buyProperty(property.id))}><Building2 className="h-4 w-4" />Buy NFT</Button>
-              <Button variant="secondary" onClick={() => runAction(async () => { await approveRental(property.rent * 3); return acceptRentalAgreement(property.id); })}><CalendarClock className="h-4 w-4" />Rent via Escrow</Button>
-              <Button variant="outline" onClick={() => runAction(async () => { await approveFractional(1000); return investInProperty(property.id, 1000); })}><TrendingUp className="h-4 w-4" />Invest $1,000</Button>
+              {property.isListed && <Button variant="outline" onClick={() => runAction(() => approveMarketplace(property.price))}>Approve {formatCurrency(property.price)} mUSDT</Button>}
+              {property.isListed && <Button onClick={() => runAction(() => buyProperty(property.id))}><Building2 className="h-4 w-4" />Buy NFT</Button>}
+              {property.hasRental && !property.rental.active && <Button variant="secondary" onClick={() => runAction(async () => { await approveRental(property.rent + Number(property.rental.securityDeposit || 0n) / 1e6); return acceptRentalAgreement(property.id); })}><CalendarClock className="h-4 w-4" />Accept Rental Escrow</Button>}
+              {property.hasPool && <Button variant="outline" onClick={() => runAction(async () => { await approveFractional(1000); return investInProperty(property.id, 1000); })}><TrendingUp className="h-4 w-4" />Invest $1,000</Button>}
+              {!property.isListed && !property.hasRental && !property.hasPool && <p className="rounded-xl bg-white/[.05] p-3 text-sm text-slate-400">This asset is registered but not listed, rented, or fractionalized yet.</p>}
             </div>
             <div className="space-y-3 text-sm">
               {[ShieldCheck, Banknote, ExternalLink].map((Icon, index) => (
