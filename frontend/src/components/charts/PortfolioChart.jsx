@@ -1,7 +1,13 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { chartData } from '../../data/properties';
 
-export function PortfolioChart() {
+export function PortfolioChart({ data = [] }) {
+  const chartData = data.length ? data : [
+    { month: 'Minted', value: 0 },
+    { month: 'Listed', value: 0 },
+    { month: 'Pools', value: 0 },
+    { month: 'Rentals', value: 0 },
+  ];
+
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
