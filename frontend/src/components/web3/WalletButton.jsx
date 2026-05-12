@@ -22,7 +22,7 @@ export function WalletButton() {
         return (
           <div className="flex items-center gap-2">
             <button onClick={openChainModal} className="hidden rounded-xl border border-white/10 bg-white/[.06] px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10 sm:flex">
-              {chain.unsupported ? <Badge variant="violet">Wrong network</Badge> : <Badge variant={chain.id === 11155111 ? 'emerald' : 'blue'}>{chain.name}</Badge>}
+              {chain.id === 11155111 && !chain.unsupported ? <Badge variant="emerald">Sepolia</Badge> : <Badge variant="violet">Switch to Sepolia</Badge>}
             </button>
             <Button variant="secondary" onClick={openAccountModal}>
               <Wallet className="h-4 w-4" />
