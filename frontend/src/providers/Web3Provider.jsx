@@ -2,17 +2,16 @@ import '@rainbow-me/rainbowkit/styles.css';
 import { darkTheme, getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider, http } from 'wagmi';
-import { mainnet, sepolia } from 'wagmi/chains';
+import { sepolia } from 'wagmi/chains';
 
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
 
 const wagmiConfig = getDefaultConfig({
   appName: 'TERRALINK',
   projectId,
-  chains: [sepolia, mainnet],
+  chains: [sepolia],
   transports: {
     [sepolia.id]: http(import.meta.env.VITE_SEPOLIA_RPC_URL || undefined),
-    [mainnet.id]: http(),
   },
   ssr: false,
 });

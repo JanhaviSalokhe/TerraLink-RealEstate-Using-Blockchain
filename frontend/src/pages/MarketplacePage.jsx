@@ -1,4 +1,5 @@
 import { SlidersHorizontal, Search, ArrowUpDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { PageShell } from '../components/layout/PageShell';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -10,34 +11,62 @@ import { useProperties } from '../hooks/useProperties';
 
 export function MarketplacePage() {
   const { properties, isLoading, error } = useProperties();
+  const [query, setQuery] = useState('');
+  const [sortMode, setSortMode] = useState('recent');
   const listedProperties = properties.filter((property) => property.isListed);
+  const visibleProperties = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return listedProperties
+      .filter((property) => {
+        if (!normalizedQuery) return true;
+        const haystack = `${property.title} ${property.location} ${property.tokenId} ${property.stateLabel}`.toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+      .sort((left, right) => {
+        if (sortMode === 'apy') return Number(right.apy || 0) - Number(left.apy || 0);
+        if (sortMode === 'price-low') return Number(left.price || 0) - Number(right.price || 0);
+        if (sortMode === 'price-high') return Number(right.price || 0) - Number(left.price || 0);
+        return Number(right.listing?.listedAt || right.createdAt || 0) - Number(left.listing?.listedAt || left.createdAt || 0);
+      });
+  }, [listedProperties, query, sortMode]);
 
   return (
     <PageShell eyebrow="Marketplace" title="Discover tokenized luxury properties" description="Search verified property NFTs, rental yield assets, and fractional investment pools with live on-chain context.">
       <div className="mb-6 grid gap-3 rounded-2xl border border-white/10 bg-white/[.04] p-3 backdrop-blur-xl md:grid-cols-[1fr_auto_auto]">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <Input className="pl-10" placeholder="Search city, property, token ID" />
+          <Input className="pl-10" placeholder="Search city, property, token ID" value={query} onChange={(event) => setQuery(event.target.value)} />
         </div>
-        <Button variant="secondary"><SlidersHorizontal className="h-4 w-4" />Filters</Button>
-        <Button variant="outline"><ArrowUpDown className="h-4 w-4" />Sort by APY</Button>
+        <select
+          className="h-11 rounded-xl border border-white/10 bg-slate-950/90 px-4 text-sm font-semibold text-white outline-none transition focus:border-emerald-300/60 focus:ring-2 focus:ring-emerald-400/20"
+          value={sortMode}
+          onChange={(event) => setSortMode(event.target.value)}
+          aria-label="Sort marketplace listings"
+        >
+          <option value="recent">Newest listings</option>
+          <option value="apy">Highest APY</option>
+          <option value="price-low">Price: low to high</option>
+          <option value="price-high">Price: high to low</option>
+        </select>
+        <Button variant="outline" onClick={() => { setQuery(''); setSortMode('recent'); }}><SlidersHorizontal className="h-4 w-4" />Reset</Button>
       </div>
       <div className="mb-6 flex flex-wrap gap-2">
         {['Live Sepolia', 'Marketplace listings', 'mUSDT settlement', 'IPFS metadata'].map((label, index) => <Badge key={label} variant={index % 2 ? 'blue' : 'emerald'}>{label}</Badge>)}
+        <Badge variant="violet"><ArrowUpDown className="mr-1 inline h-3 w-3" />{visibleProperties.length} shown</Badge>
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {isLoading && Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-[520px]" />)}
-          {!isLoading && listedProperties.map((property) => <PropertyCard key={property.id} property={property} />)}
-          {!isLoading && !listedProperties.length && (
+          {!isLoading && visibleProperties.map((property) => <PropertyCard key={property.id} property={property} />)}
+          {!isLoading && !visibleProperties.length && (
             <div className="md:col-span-2 xl:col-span-3">
-              <EmptyState title={error ? 'Unable to read marketplace' : 'No active listings yet'} description={error || 'List an owned property from My Assets to make it appear in this live marketplace.'} />
+              <EmptyState title={error ? 'Unable to read marketplace' : 'No matching active listings'} description={error || 'Adjust your search/sort settings, or list an owned property from My Assets to make it appear in this live marketplace.'} />
             </div>
           )}
         </div>
         <div className="sticky top-28 h-[620px] overflow-hidden rounded-2xl border border-white/10 bg-grid bg-[length:32px_32px]">
           <div className="absolute inset-0 bg-aurora opacity-50" />
-          {listedProperties.map((property, index) => (
+          {visibleProperties.map((property, index) => (
             <div key={property.id} className="absolute rounded-full border border-emerald-200/40 bg-emerald-300/20 px-3 py-1 text-xs font-bold text-emerald-100 shadow-glow" style={{ left: `${20 + index * 15}%`, top: `${18 + (index * 19) % 62}%` }}>
               {property.location.split(',')[0]}
             </div>
