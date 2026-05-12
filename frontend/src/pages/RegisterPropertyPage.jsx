@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useWriteContract } from 'wagmi';
+import { useChainId, usePublicClient, useWriteContract } from 'wagmi';
 import { ClipboardCheck, FileJson, Image, Sparkles } from 'lucide-react';
 import { PageShell } from '../components/layout/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -9,13 +9,15 @@ import { Progress } from '../components/ui/progress';
 import { DropzoneUploader } from '../components/upload/DropzoneUploader';
 import { TransactionModal } from '../components/web3/TransactionModal';
 import { useIpfsUpload } from '../hooks/useIpfsUpload';
-import { contracts, propertyNftAbi } from '../lib/contracts';
+import { contracts, propertyNftAbi, SEPOLIA_CHAIN_ID } from '../lib/contracts';
 import toast from 'react-hot-toast';
 
 export function RegisterPropertyPage() {
   const [files, setFiles] = useState([]);
   const [txOpen, setTxOpen] = useState(false);
   const [txStatus, setTxStatus] = useState('idle');
+  const chainId = useChainId();
+  const publicClient = usePublicClient({ chainId: SEPOLIA_CHAIN_ID });
   const { writeContractAsync, data: hash } = useWriteContract();
   const { uploadProperty, progress, metadataCid } = useIpfsUpload();
   const [values, setValues] = useState({
@@ -38,15 +40,20 @@ export function RegisterPropertyPage() {
     if (!files.length) return toast.error('Upload at least one property image');
     setTxOpen(true);
     try {
+      if (chainId !== SEPOLIA_CHAIN_ID) throw new Error('Please switch to Sepolia before minting a PropertyNFT.');
+      if (!publicClient) throw new Error('Sepolia RPC client is not ready.');
       setTxStatus('uploading');
       const result = await uploadProperty({ files, values });
       setTxStatus('pending');
       const metadataURI = `ipfs://${result.metadataCid}`;
-      await writeContractAsync({ address: contracts.propertyNFT, abi: propertyNftAbi, functionName: 'registerProperty', args: [metadataURI] });
+      const txHash = await writeContractAsync({ chainId: SEPOLIA_CHAIN_ID, address: contracts.propertyNFT, abi: propertyNftAbi, functionName: 'registerProperty', args: [metadataURI] });
       setTxStatus('confirming');
-      setTimeout(() => setTxStatus('success'), 1400);
-    } catch {
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      setTxStatus('success');
+      toast.success('Property registered on Sepolia');
+    } catch (error) {
       setTxStatus('error');
+      toast.error(error.shortMessage || error.message || 'Property registration failed');
     }
   }
 
