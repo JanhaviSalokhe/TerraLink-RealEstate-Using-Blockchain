@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useAccount } from 'wagmi';
 import { Activity, ArrowRight, Banknote, Building2, CalendarClock, ExternalLink, ShieldCheck, TrendingUp } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -15,24 +16,49 @@ import toast from 'react-hot-toast';
 
 export function PropertyPage() {
   const { id } = useParams();
+  const { address } = useAccount();
   const [selected, setSelected] = useState(0);
   const [txOpen, setTxOpen] = useState(false);
   const [txStatus, setTxStatus] = useState('idle');
-  const { approveMarketplace, approveRental, approveFractional, buyProperty, acceptRentalAgreement, investInProperty, hash } = useProtocolActions();
+  const { approveMarketplace, approveRental, approveFractional, buyProperty, acceptRentalAgreement, investInProperty, depositFractionalRentalIncome, claimFractionalPayout, hash } = useProtocolActions();
   const { property, isLoading, error } = useProperty(id);
 
   async function runAction(action) {
     setTxOpen(true);
     setTxStatus('pending');
     try {
-      await action();
-      setTxStatus('confirming');
-      setTimeout(() => setTxStatus('success'), 1400);
-      toast.success('Transaction submitted');
+      const result = await action();
+      if (!result) {
+        setTxStatus('idle');
+        setTxOpen(false);
+        return;
+      }
+      setTxStatus('success');
+      toast.success('Transaction confirmed on Sepolia');
     } catch (error) {
       setTxStatus('error');
       toast.error(error.shortMessage || error.message || 'Transaction failed');
     }
+  }
+
+  const isOwner = property?.owner?.toLowerCase() === address?.toLowerCase();
+
+  async function investCustomAmount() {
+    const amount = window.prompt('Investment amount in mUSDT', '1000');
+    if (!amount) return;
+    return runAction(async () => {
+      await approveFractional(amount);
+      return investInProperty(property.id, amount);
+    });
+  }
+
+  async function depositRentalIncome() {
+    const amount = window.prompt('Rental income amount to deposit in mUSDT', String(property.rent || '1000'));
+    if (!amount) return;
+    return runAction(async () => {
+      await approveFractional(amount);
+      return depositFractionalRentalIncome(property.id, amount);
+    });
   }
 
   if (!property && !isLoading) {
@@ -127,7 +153,9 @@ export function PropertyPage() {
               {property.isListed && <Button variant="outline" onClick={() => runAction(() => approveMarketplace(property.price))}>Approve {formatCurrency(property.price)} mUSDT</Button>}
               {property.isListed && <Button onClick={() => runAction(() => buyProperty(property.id))}><Building2 className="h-4 w-4" />Buy NFT</Button>}
               {property.hasRental && !property.rental.active && <Button variant="secondary" onClick={() => runAction(async () => { await approveRental(property.rent + Number(property.rental.securityDeposit || 0n) / 1e6); return acceptRentalAgreement(property.id); })}><CalendarClock className="h-4 w-4" />Accept Rental Escrow</Button>}
-              {property.hasPool && <Button variant="outline" onClick={() => runAction(async () => { await approveFractional(1000); return investInProperty(property.id, 1000); })}><TrendingUp className="h-4 w-4" />Invest $1,000</Button>}
+              {property.hasPool && <Button variant="outline" onClick={investCustomAmount}><TrendingUp className="h-4 w-4" />Invest</Button>}
+              {property.hasPool && <Button variant="secondary" onClick={() => runAction(() => claimFractionalPayout(property.id))} disabled={!property.viewerPendingPayout}>Claim {formatCurrency(property.viewerPendingPayout || 0, true)}</Button>}
+              {property.hasPool && isOwner && <Button variant="outline" onClick={depositRentalIncome}>Deposit Rental Income</Button>}
               {!property.isListed && !property.hasRental && !property.hasPool && <p className="rounded-xl bg-white/[.05] p-3 text-sm text-slate-400">This asset is registered but not listed, rented, or fractionalized yet.</p>}
             </div>
             <div className="space-y-3 text-sm">

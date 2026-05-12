@@ -1,12 +1,30 @@
 import { parseUnits } from 'viem';
-import { useWriteContract } from 'wagmi';
-import { contracts, erc20Abi, fractionalInvestmentAbi, marketplaceAbi, propertyNftAbi, rentalEscrowAbi } from '../lib/contracts';
+import { useChainId, usePublicClient, useWriteContract } from 'wagmi';
+import { contracts, erc20Abi, fractionalInvestmentAbi, marketplaceAbi, propertyNftAbi, rentalEscrowAbi, SEPOLIA_CHAIN_ID } from '../lib/contracts';
 
 export function useProtocolActions() {
+  const chainId = useChainId();
+  const publicClient = usePublicClient({ chainId: SEPOLIA_CHAIN_ID });
   const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
 
+  function assertSepolia() {
+    if (chainId !== SEPOLIA_CHAIN_ID) {
+      throw new Error('Please switch to Sepolia before using TerraLink contracts.');
+    }
+    if (!publicClient) {
+      throw new Error('Sepolia RPC client is not ready. Check your wallet/network connection.');
+    }
+  }
+
+  async function writeAndWait(request) {
+    assertSepolia();
+    const txHash = await writeContractAsync({ chainId: SEPOLIA_CHAIN_ID, ...request });
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return txHash;
+  }
+
   async function approveMarketplace(amountUsd) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.mockUSDT,
       abi: erc20Abi,
       functionName: 'approve',
@@ -15,7 +33,7 @@ export function useProtocolActions() {
   }
 
   async function approveFractional(amountUsd) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.mockUSDT,
       abi: erc20Abi,
       functionName: 'approve',
@@ -24,7 +42,7 @@ export function useProtocolActions() {
   }
 
   async function approveRental(amountUsd) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.mockUSDT,
       abi: erc20Abi,
       functionName: 'approve',
@@ -33,7 +51,7 @@ export function useProtocolActions() {
   }
 
   async function buyProperty(tokenId) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.marketplace,
       abi: marketplaceAbi,
       functionName: 'buyProperty',
@@ -42,7 +60,7 @@ export function useProtocolActions() {
   }
 
   async function setPropertyOperatorApproval(operator, approved = true) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.propertyNFT,
       abi: propertyNftAbi,
       functionName: 'setApprovalForAll',
@@ -63,7 +81,7 @@ export function useProtocolActions() {
   }
 
   async function listProperty(tokenId, priceUsd) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.marketplace,
       abi: marketplaceAbi,
       functionName: 'listProperty',
@@ -71,8 +89,26 @@ export function useProtocolActions() {
     });
   }
 
+  async function cancelListing(tokenId) {
+    return writeAndWait({
+      address: contracts.marketplace,
+      abi: marketplaceAbi,
+      functionName: 'cancelListing',
+      args: [BigInt(tokenId)],
+    });
+  }
+
+  async function updateListingPrice(tokenId, newPriceUsd) {
+    return writeAndWait({
+      address: contracts.marketplace,
+      abi: marketplaceAbi,
+      functionName: 'updateListingPrice',
+      args: [BigInt(tokenId), parseUnits(String(newPriceUsd), 6)],
+    });
+  }
+
   async function acceptRentalAgreement(propertyId) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.rentalEscrow,
       abi: rentalEscrowAbi,
       functionName: 'acceptRentalAgreement',
@@ -81,7 +117,7 @@ export function useProtocolActions() {
   }
 
   async function investInProperty(propertyId, amountUsd) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.fractionalInvestment,
       abi: fractionalInvestmentAbi,
       functionName: 'investInProperty',
@@ -90,7 +126,7 @@ export function useProtocolActions() {
   }
 
   async function enableFractionalInvestment(propertyId, targetAmountUsd) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.fractionalInvestment,
       abi: fractionalInvestmentAbi,
       functionName: 'enableFractionalInvestment',
@@ -100,7 +136,7 @@ export function useProtocolActions() {
 
   async function createRentalAgreement(propertyId, tenant, rentUsd, securityDepositUsd, durationDays) {
     const zeroAddress = '0x0000000000000000000000000000000000000000';
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.rentalEscrow,
       abi: rentalEscrowAbi,
       functionName: 'createRentalAgreement',
@@ -115,7 +151,7 @@ export function useProtocolActions() {
   }
 
   async function payRent(propertyId) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.rentalEscrow,
       abi: rentalEscrowAbi,
       functionName: 'payRent',
@@ -123,8 +159,44 @@ export function useProtocolActions() {
     });
   }
 
+  async function deductFromDeposit(propertyId) {
+    return writeAndWait({
+      address: contracts.rentalEscrow,
+      abi: rentalEscrowAbi,
+      functionName: 'deductFromDeposit',
+      args: [BigInt(propertyId)],
+    });
+  }
+
+  async function terminateRental(propertyId) {
+    return writeAndWait({
+      address: contracts.rentalEscrow,
+      abi: rentalEscrowAbi,
+      functionName: 'terminateRental',
+      args: [BigInt(propertyId)],
+    });
+  }
+
+  async function refundDeposit(propertyId) {
+    return writeAndWait({
+      address: contracts.rentalEscrow,
+      abi: rentalEscrowAbi,
+      functionName: 'refundDeposit',
+      args: [BigInt(propertyId)],
+    });
+  }
+
+  async function depositFractionalRentalIncome(propertyId, amountUsd) {
+    return writeAndWait({
+      address: contracts.fractionalInvestment,
+      abi: fractionalInvestmentAbi,
+      functionName: 'depositRentalIncome',
+      args: [BigInt(propertyId), parseUnits(String(amountUsd), 6)],
+    });
+  }
+
   async function claimFractionalPayout(propertyId) {
-    return writeContractAsync({
+    return writeAndWait({
       address: contracts.fractionalInvestment,
       abi: fractionalInvestmentAbi,
       functionName: 'distributeRentalIncome',
@@ -140,12 +212,18 @@ export function useProtocolActions() {
     approveRentalOperator,
     approveFractionalOperator,
     listProperty,
+    cancelListing,
+    updateListingPrice,
     buyProperty,
     acceptRentalAgreement,
     investInProperty,
     enableFractionalInvestment,
     createRentalAgreement,
     payRent,
+    deductFromDeposit,
+    terminateRental,
+    refundDeposit,
+    depositFractionalRentalIncome,
     claimFractionalPayout,
     hash,
     isPending,

@@ -1,3 +1,5 @@
+export const SEPOLIA_CHAIN_ID = 11155111;
+
 export const contracts = {
   mockUSDT: import.meta.env.VITE_MOCK_USDT_ADDRESS || '0x088DcD9178a4a58786fA3cf18081649a2b29bbb1',
   propertyNFT: import.meta.env.VITE_PROPERTY_NFT_ADDRESS || '0x329192aE8732B222be6505E6DFe1A02400361187',
@@ -139,6 +141,23 @@ export const marketplaceAbi = [
   },
   {
     type: 'function',
+    name: 'cancelListing',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'updateListingPrice',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'tokenId', type: 'uint256' },
+      { name: 'newPrice', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'getListing',
     stateMutability: 'view',
     inputs: [{ name: 'tokenId', type: 'uint256' }],
@@ -216,6 +235,27 @@ export const rentalEscrowAbi = [
   },
   {
     type: 'function',
+    name: 'deductFromDeposit',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'propertyId', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'terminateRental',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'propertyId', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'refundDeposit',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'propertyId', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'getRentalAgreement',
     stateMutability: 'view',
     inputs: [{ name: 'propertyId', type: 'uint256' }],
@@ -272,6 +312,16 @@ export const fractionalInvestmentAbi = [
   },
   {
     type: 'function',
+    name: 'depositRentalIncome',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'propertyId', type: 'uint256' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'distributeRentalIncome',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'propertyId', type: 'uint256' }],
@@ -297,6 +347,16 @@ export const fractionalInvestmentAbi = [
   },
   {
     type: 'function',
+    name: 'getInvestorShare',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'propertyId', type: 'uint256' },
+      { name: 'investor', type: 'address' },
+    ],
+    outputs: [{ name: 'shareWad', type: 'uint256' }],
+  },
+  {
+    type: 'function',
     name: 'pendingPayout',
     stateMutability: 'view',
     inputs: [
@@ -308,6 +368,16 @@ export const fractionalInvestmentAbi = [
   {
     type: 'function',
     name: 'contributions',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'propertyId', type: 'uint256' },
+      { name: 'investor', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'payoutHistory',
     stateMutability: 'view',
     inputs: [
       { name: 'propertyId', type: 'uint256' },

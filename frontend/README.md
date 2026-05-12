@@ -26,7 +26,7 @@ VITE_RENTAL_ESCROW_ADDRESS=0x80507292eBa35BcBd5c69EDBCb52255dB422Eb36
 VITE_FRACTIONAL_ADDRESS=0xB97D45C1Da9d41E5d9A76ea31c319C2B691d0ef9
 ```
 
-The deployed Sepolia addresses are already configured as defaults in source and in `.env.example`; override them only if you redeploy. `VITE_DEPLOYMENT_BLOCK` is optional, but setting it to the PropertyNFT deployment block makes event indexing faster and more reliable on RPC providers with log-range limits.
+The deployed Sepolia addresses are already configured as defaults in source and in `.env.example`; override them only if you redeploy. `VITE_DEPLOYMENT_BLOCK` defaults to the known PropertyNFT deployment block in source, and setting it explicitly keeps event indexing fast and reliable on RPC providers with log-range limits.
 
 Pinata uploads are intentionally handled through a reusable utility and hook. In production, proxy the Pinata JWT through a backend if you do not want the browser to hold upload credentials.
 
@@ -34,6 +34,9 @@ Pinata uploads are intentionally handled through a reusable utility and hook. In
 
 - Properties are discovered from `PropertyNFT.PropertyRegistered` events.
 - Metadata is fetched from the token URI/IPFS URI returned by `getProperty`.
-- Marketplace cards render only active `Marketplace.getListing` records.
-- Owner tools approve the protocol operator, then list, open rentals, or enable fractional pools.
-- Buyer/tenant/investor actions approve mUSDT, then call the deployed Sepolia contracts.
+- Marketplace cards render only active `Marketplace.getListing` records and support search, sorting, price updates, and listing cancellation.
+- Owner tools approve the protocol operator, wait for the approval receipt, then list, open rentals, or enable fractional pools.
+- Buyer/tenant/investor actions approve mUSDT, wait for the allowance receipt, then call the deployed Sepolia contracts.
+- Rental escrow controls cover accepting open rentals, paying rent, late-deposit deductions, terminations, and deposit refunds.
+- Fractional pool controls cover contributions, owner rental-income deposits, contributor counts, pending payout reads, and payout claims.
+- Contract writes are restricted to Sepolia because the configured contracts are Sepolia deployments.
