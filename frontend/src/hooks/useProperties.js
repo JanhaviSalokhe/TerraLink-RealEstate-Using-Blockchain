@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
-import { contracts, fractionalInvestmentAbi, marketplaceAbi, propertyNftAbi, rentalEscrowAbi } from '../lib/contracts';
+import { contracts, fractionalInvestmentAbi, marketplaceAbi, propertyNftAbi, rentalEscrowAbi, SEPOLIA_CHAIN_ID } from '../lib/contracts';
 import { fetchMetadata, normalizeMetadata, PROPERTY_STATES } from '../lib/propertyMetadata';
 import { formatTokenAmount } from '../lib/utils';
 
-const DEPLOYMENT_BLOCK = import.meta.env.VITE_DEPLOYMENT_BLOCK ? BigInt(import.meta.env.VITE_DEPLOYMENT_BLOCK) : 0n;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const DEFAULT_DEPLOYMENT_BLOCK = 10834539n;
+const DEPLOYMENT_BLOCK = import.meta.env.VITE_DEPLOYMENT_BLOCK ? BigInt(import.meta.env.VITE_DEPLOYMENT_BLOCK) : DEFAULT_DEPLOYMENT_BLOCK;
 
 function toNumberId(value) {
   return Number(value || 0n);
@@ -18,7 +20,11 @@ async function safeRead(publicClient, request, fallback = null) {
   }
 }
 
-async function hydrateProperty(publicClient, event) {
+function isNonZeroAddress(address) {
+  return Boolean(address && address !== ZERO_ADDRESS);
+}
+
+async function hydrateProperty(publicClient, event, connectedAddress) {
   const tokenId = event.args.tokenId;
   const numericId = toNumberId(tokenId);
   const [propertyResult, owner, listing, pool, rental] = await Promise.all([
@@ -37,12 +43,26 @@ async function hydrateProperty(publicClient, event) {
   } catch {
     rawMetadata = {};
   }
+
+  const activePool = Boolean(pool?.active);
+  const viewerAddress = connectedAddress || ZERO_ADDRESS;
+  const [contributors, viewerContribution, viewerPendingPayout, viewerPayoutHistory, viewerShareWad] = activePool
+    ? await Promise.all([
+        safeRead(publicClient, { address: contracts.fractionalInvestment, abi: fractionalInvestmentAbi, functionName: 'getContributors', args: [tokenId] }, []),
+        connectedAddress ? safeRead(publicClient, { address: contracts.fractionalInvestment, abi: fractionalInvestmentAbi, functionName: 'contributions', args: [tokenId, viewerAddress] }, 0n) : 0n,
+        connectedAddress ? safeRead(publicClient, { address: contracts.fractionalInvestment, abi: fractionalInvestmentAbi, functionName: 'pendingPayout', args: [tokenId, viewerAddress] }, 0n) : 0n,
+        connectedAddress ? safeRead(publicClient, { address: contracts.fractionalInvestment, abi: fractionalInvestmentAbi, functionName: 'payoutHistory', args: [tokenId, viewerAddress] }, 0n) : 0n,
+        connectedAddress ? safeRead(publicClient, { address: contracts.fractionalInvestment, abi: fractionalInvestmentAbi, functionName: 'getInvestorShare', args: [tokenId, viewerAddress] }, 0n) : 0n,
+      ])
+    : [[], 0n, 0n, 0n, 0n];
+
   const metadata = normalizeMetadata(rawMetadata, numericId);
   const listingPrice = listing?.active ? formatTokenAmount(listing.price) : 0;
-  const targetAmount = pool?.active ? formatTokenAmount(pool.targetAmount) : 0;
-  const totalRaised = pool?.active ? formatTokenAmount(pool.totalRaised) : 0;
-  const rentAmount = rental?.owner && rental.owner !== '0x0000000000000000000000000000000000000000' ? formatTokenAmount(rental.rentAmount) : metadata.rent;
-  const funded = targetAmount ? Math.round((totalRaised / targetAmount) * 100) : 0;
+  const targetAmount = activePool ? formatTokenAmount(pool.targetAmount) : 0;
+  const totalRaised = activePool ? formatTokenAmount(pool.totalRaised) : 0;
+  const rentAmount = isNonZeroAddress(rental?.owner) ? formatTokenAmount(rental.rentAmount) : metadata.rent;
+  const funded = targetAmount ? Math.min(100, Math.round((totalRaised / targetAmount) * 100)) : 0;
+  const hasRental = isNonZeroAddress(rental?.owner);
 
   return {
     id: String(numericId),
@@ -59,21 +79,27 @@ async function hydrateProperty(publicClient, event) {
     pool,
     rental,
     isListed: Boolean(listing?.active),
-    hasPool: Boolean(pool?.active),
-    hasRental: Boolean(rental?.owner && rental.owner !== '0x0000000000000000000000000000000000000000'),
+    hasPool: activePool,
+    hasRental,
     price: listingPrice || metadata.price,
     rent: rentAmount,
     targetAmount,
     totalRaised,
     funded,
-    contributors: [],
-    badge: listing?.active ? 'Listed NFT' : pool?.active ? 'Fractional Pool' : rental?.active ? 'Active Rental' : 'Registered',
+    contributors,
+    backerCount: contributors.length,
+    viewerContribution: formatTokenAmount(viewerContribution),
+    viewerPendingPayout: formatTokenAmount(viewerPendingPayout),
+    viewerPayoutHistory: formatTokenAmount(viewerPayoutHistory),
+    viewerSharePercent: Number(viewerShareWad || 0n) / 1e16,
+    badge: listing?.active ? 'Listed NFT' : pool?.active ? 'Fractional Pool' : rental?.active ? 'Active Rental' : hasRental ? 'Open Rental' : 'Registered',
     ...metadata,
   };
 }
 
 export function useProperties() {
-  const publicClient = usePublicClient();
+  const { address } = useAccount();
+  const publicClient = usePublicClient({ chainId: SEPOLIA_CHAIN_ID });
   const [properties, setProperties] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -103,7 +129,7 @@ export function useProperties() {
         });
         const uniqueEvents = [...new Map(events.map((event) => [event.args.tokenId.toString(), event])).values()]
           .sort((a, b) => Number(a.args.tokenId - b.args.tokenId));
-        const hydrated = await Promise.all(uniqueEvents.map((event) => hydrateProperty(publicClient, event)));
+        const hydrated = await Promise.all(uniqueEvents.map((event) => hydrateProperty(publicClient, event, address)));
         if (!cancelled) setProperties(hydrated);
       } catch (loadError) {
         if (!cancelled) setError(loadError.shortMessage || loadError.message || 'Unable to load on-chain properties');
@@ -116,7 +142,7 @@ export function useProperties() {
     return () => {
       cancelled = true;
     };
-  }, [publicClient, refreshIndex]);
+  }, [publicClient, address, refreshIndex]);
 
   return { properties, isLoading, error, refresh };
 }
