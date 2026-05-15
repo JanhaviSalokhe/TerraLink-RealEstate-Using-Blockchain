@@ -13,6 +13,9 @@ const LOAD_RETRY_DELAY_MS = 60_000;
 const propertyCache = new Map();
 const inFlightLoads = new Map();
 const failedLoads = new Map();
+const DEFAULT_FALLBACK_PROPERTY_SCAN_LIMIT = 50;
+const FALLBACK_PROPERTY_SCAN_LIMIT = Number(import.meta.env.VITE_FALLBACK_PROPERTY_SCAN_LIMIT || DEFAULT_FALLBACK_PROPERTY_SCAN_LIMIT);
+
 
 function toNumberId(value) {
   return Number(value || 0n);
@@ -64,6 +67,35 @@ async function getPropertyRegisteredEvents(publicClient) {
   return events;
 }
 
+async function getPropertyEventsByTokenScan(publicClient) {
+  const events = [];
+
+  for (let tokenId = 1; tokenId <= FALLBACK_PROPERTY_SCAN_LIMIT; tokenId += 1) {
+    const tokenIdBigInt = BigInt(tokenId);
+    const propertyResult = await safeRead(publicClient, {
+      address: contracts.propertyNFT,
+      abi: propertyNftAbi,
+      functionName: 'getProperty',
+      args: [tokenIdBigInt],
+    });
+
+    if (!propertyResult) continue;
+
+    const chainProperty = propertyResult[0];
+    events.push({
+      args: {
+        tokenId: tokenIdBigInt,
+        creator: chainProperty.creator,
+        metadataURI: propertyResult[1],
+        timestamp: chainProperty.createdAt,
+      },
+    });
+  }
+
+  return events;
+}
+
+
 async function hydrateProperty(publicClient, event, connectedAddress) {
   const tokenId = event.args.tokenId;
   const numericId = toNumberId(tokenId);
@@ -83,6 +115,8 @@ async function hydrateProperty(publicClient, event, connectedAddress) {
   } catch {
     rawMetadata = {};
   }
+
+
 
   const activePool = Boolean(pool?.active);
   const viewerAddress = connectedAddress || ZERO_ADDRESS;
@@ -154,7 +188,13 @@ async function loadProperties(publicClient, address, { force = false } = {}) {
   }
 
   const loadPromise = (async () => {
-    const events = await getPropertyRegisteredEvents(publicClient);
+    let events;
+    try {
+      events = await getPropertyRegisteredEvents(publicClient);
+    } catch (logError) {
+      events = await getPropertyEventsByTokenScan(publicClient);
+      if (!events.length) throw logError;
+    }
     const uniqueEvents = [...new Map(events.map((event) => [event.args.tokenId.toString(), event])).values()]
       .sort((a, b) => Number(a.args.tokenId - b.args.tokenId));
     const hydrated = await Promise.all(uniqueEvents.map((event) => hydrateProperty(publicClient, event, address)));
@@ -248,4 +288,32 @@ export function useOwnedProperties() {
     [result.properties, address],
   );
   return { ...result, properties: ownedProperties, allProperties: result.properties };
+}
+
+async function getPropertyEventsByTokenScan(publicClient) {
+  const events = [];
+
+  for (let tokenId = 1; tokenId <= FALLBACK_PROPERTY_SCAN_LIMIT; tokenId += 1) {
+    const tokenIdBigInt = BigInt(tokenId);
+    const propertyResult = await safeRead(publicClient, {
+      address: contracts.propertyNFT,
+      abi: propertyNftAbi,
+      functionName: 'getProperty',
+      args: [tokenIdBigInt],
+    });
+
+    if (!propertyResult) continue;
+
+    const chainProperty = propertyResult[0];
+    events.push({
+      args: {
+        tokenId: tokenIdBigInt,
+        creator: chainProperty.creator,
+        metadataURI: propertyResult[1],
+        timestamp: chainProperty.createdAt,
+      },
+    });
+  }
+
+  return events;
 }
