@@ -4,7 +4,7 @@ export const contracts = {
   mockUSDT: import.meta.env.VITE_MOCK_USDT_ADDRESS || '0x088DcD9178a4a58786fA3cf18081649a2b29bbb1',
   propertyNFT: import.meta.env.VITE_PROPERTY_NFT_ADDRESS || '0x329192aE8732B222be6505E6DFe1A02400361187',
   marketplace: import.meta.env.VITE_MARKETPLACE_ADDRESS || '0x4dAfAb9a1560Cff8E33e031e8cA240408f069BdB',
-  rentalEscrow: import.meta.env.VITE_RENTAL_ESCROW_ADDRESS || '0x80507292eBa35BcBd5c69EDBCb52255dB422Eb36',
+  rentalEscrow: import.meta.env.VITE_RENTAL_ESCROW_ADDRESS || '0x4d4C151FF9A040B1Bc9538aaaf563E7d054fB198', //new gas optimized address
   fractionalInvestment: import.meta.env.VITE_FRACTIONAL_ADDRESS || '0xB97D45C1Da9d41E5d9A76ea31c319C2B691d0ef9',
 };
 
