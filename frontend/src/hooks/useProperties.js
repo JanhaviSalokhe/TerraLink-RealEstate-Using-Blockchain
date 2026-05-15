@@ -9,8 +9,10 @@ const DEFAULT_DEPLOYMENT_BLOCK = 10834539n;
 const DEPLOYMENT_BLOCK = import.meta.env.VITE_DEPLOYMENT_BLOCK ? BigInt(import.meta.env.VITE_DEPLOYMENT_BLOCK) : DEFAULT_DEPLOYMENT_BLOCK;
 const DEFAULT_LOG_CHUNK_SIZE = 5000n;
 const LOG_CHUNK_SIZE = import.meta.env.VITE_LOG_CHUNK_SIZE ? BigInt(import.meta.env.VITE_LOG_CHUNK_SIZE) : DEFAULT_LOG_CHUNK_SIZE;
+const LOAD_RETRY_DELAY_MS = 60_000;
 const propertyCache = new Map();
 const inFlightLoads = new Map();
+const failedLoads = new Map();
 
 function toNumberId(value) {
   return Number(value || 0n);
@@ -137,6 +139,11 @@ async function hydrateProperty(publicClient, event, connectedAddress) {
 
 async function loadProperties(publicClient, address, { force = false } = {}) {
   const cacheKey = getCacheKey(address);
+  const failedLoad = failedLoads.get(cacheKey);
+
+  if (!force && failedLoad && Date.now() - failedLoad.timestamp < LOAD_RETRY_DELAY_MS) {
+    throw failedLoad.error;
+  }
 
   if (!force && propertyCache.has(cacheKey)) {
     return propertyCache.get(cacheKey);
@@ -152,6 +159,7 @@ async function loadProperties(publicClient, address, { force = false } = {}) {
       .sort((a, b) => Number(a.args.tokenId - b.args.tokenId));
     const hydrated = await Promise.all(uniqueEvents.map((event) => hydrateProperty(publicClient, event, address)));
     propertyCache.set(cacheKey, hydrated);
+    failedLoads.delete(cacheKey);
     return hydrated;
   })();
 
@@ -159,6 +167,9 @@ async function loadProperties(publicClient, address, { force = false } = {}) {
 
   try {
     return await loadPromise;
+  } catch (error) {
+    failedLoads.set(cacheKey, { error, timestamp: Date.now() });
+    throw error;
   } finally {
     inFlightLoads.delete(cacheKey);
   }
@@ -173,6 +184,7 @@ export function useProperties() {
   const [error, setError] = useState('');
   const [refreshIndex, setRefreshIndex] = useState(0);
   const isLoadingRef = useRef(false);
+  const lastLoadKeyRef = useRef('');
 
   const refresh = useCallback(() => setRefreshIndex((index) => index + 1), []);
 
@@ -191,6 +203,13 @@ export function useProperties() {
         setIsLoading(false);
         return;
       }
+
+      const loadKey = `${cacheKey}:${refreshIndex}`;
+      if (lastLoadKeyRef.current === loadKey && !refreshIndex) {
+        setIsLoading(false);
+        return;
+      }
+      lastLoadKeyRef.current = loadKey;
 
       isLoadingRef.current = true;
       setIsLoading(true);
