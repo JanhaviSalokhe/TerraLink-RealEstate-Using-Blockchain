@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import { contracts, fractionalInvestmentAbi, marketplaceAbi, propertyNftAbi, rentalEscrowAbi, SEPOLIA_CHAIN_ID } from '../lib/contracts';
 import { fetchMetadata, normalizeMetadata, PROPERTY_STATES } from '../lib/propertyMetadata';
@@ -7,6 +7,10 @@ import { formatTokenAmount } from '../lib/utils';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const DEFAULT_DEPLOYMENT_BLOCK = 10834539n;
 const DEPLOYMENT_BLOCK = import.meta.env.VITE_DEPLOYMENT_BLOCK ? BigInt(import.meta.env.VITE_DEPLOYMENT_BLOCK) : DEFAULT_DEPLOYMENT_BLOCK;
+const DEFAULT_LOG_CHUNK_SIZE = 5000n;
+const LOG_CHUNK_SIZE = import.meta.env.VITE_LOG_CHUNK_SIZE ? BigInt(import.meta.env.VITE_LOG_CHUNK_SIZE) : DEFAULT_LOG_CHUNK_SIZE;
+const propertyCache = new Map();
+const inFlightLoads = new Map();
 
 function toNumberId(value) {
   return Number(value || 0n);
@@ -22,6 +26,40 @@ async function safeRead(publicClient, request, fallback = null) {
 
 function isNonZeroAddress(address) {
   return Boolean(address && address !== ZERO_ADDRESS);
+}
+
+function getCacheKey(address) {
+  return [
+    SEPOLIA_CHAIN_ID,
+    contracts.propertyNFT,
+    contracts.marketplace,
+    contracts.rentalEscrow,
+    contracts.fractionalInvestment,
+    address?.toLowerCase() || ZERO_ADDRESS,
+  ].join(':');
+}
+
+async function getPropertyRegisteredEvents(publicClient) {
+  const latestBlock = await publicClient.getBlockNumber();
+  if (latestBlock < DEPLOYMENT_BLOCK) return [];
+
+  const events = [];
+  let fromBlock = DEPLOYMENT_BLOCK;
+
+  while (fromBlock <= latestBlock) {
+    const toBlock = fromBlock + LOG_CHUNK_SIZE - 1n > latestBlock ? latestBlock : fromBlock + LOG_CHUNK_SIZE - 1n;
+    const chunkEvents = await publicClient.getContractEvents({
+      address: contracts.propertyNFT,
+      abi: propertyNftAbi,
+      eventName: 'PropertyRegistered',
+      fromBlock,
+      toBlock,
+    });
+    events.push(...chunkEvents);
+    fromBlock = toBlock + 1n;
+  }
+
+  return events;
 }
 
 async function hydrateProperty(publicClient, event, connectedAddress) {
@@ -97,43 +135,73 @@ async function hydrateProperty(publicClient, event, connectedAddress) {
   };
 }
 
+async function loadProperties(publicClient, address, { force = false } = {}) {
+  const cacheKey = getCacheKey(address);
+
+  if (!force && propertyCache.has(cacheKey)) {
+    return propertyCache.get(cacheKey);
+  }
+
+  if (inFlightLoads.has(cacheKey)) {
+    return inFlightLoads.get(cacheKey);
+  }
+
+  const loadPromise = (async () => {
+    const events = await getPropertyRegisteredEvents(publicClient);
+    const uniqueEvents = [...new Map(events.map((event) => [event.args.tokenId.toString(), event])).values()]
+      .sort((a, b) => Number(a.args.tokenId - b.args.tokenId));
+    const hydrated = await Promise.all(uniqueEvents.map((event) => hydrateProperty(publicClient, event, address)));
+    propertyCache.set(cacheKey, hydrated);
+    return hydrated;
+  })();
+
+  inFlightLoads.set(cacheKey, loadPromise);
+
+  try {
+    return await loadPromise;
+  } finally {
+    inFlightLoads.delete(cacheKey);
+  }
+}
+
 export function useProperties() {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: SEPOLIA_CHAIN_ID });
-  const [properties, setProperties] = useState([]);
+  const cacheKey = getCacheKey(address);
+  const [properties, setProperties] = useState(() => propertyCache.get(cacheKey) || []);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshIndex, setRefreshIndex] = useState(0);
+  const isLoadingRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshIndex((index) => index + 1), []);
-
-  useEffect(() => {
-    const interval = window.setInterval(refresh, 12000);
-    return () => window.clearInterval(interval);
-  }, [refresh]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      if (!publicClient) return;
+      if (!publicClient || isLoadingRef.current) {
+        if (!publicClient && !cancelled) setIsLoading(false);
+        return;
+      }
+
+      const cachedProperties = propertyCache.get(cacheKey);
+      if (!refreshIndex && cachedProperties) {
+        setProperties(cachedProperties);
+        setIsLoading(false);
+        return;
+      }
+
+      isLoadingRef.current = true;
       setIsLoading(true);
       setError('');
       try {
-        const events = await publicClient.getContractEvents({
-          address: contracts.propertyNFT,
-          abi: propertyNftAbi,
-          eventName: 'PropertyRegistered',
-          fromBlock: DEPLOYMENT_BLOCK,
-          toBlock: 'latest',
-        });
-        const uniqueEvents = [...new Map(events.map((event) => [event.args.tokenId.toString(), event])).values()]
-          .sort((a, b) => Number(a.args.tokenId - b.args.tokenId));
-        const hydrated = await Promise.all(uniqueEvents.map((event) => hydrateProperty(publicClient, event, address)));
+        const hydrated = await loadProperties(publicClient, address, { force: refreshIndex > 0 });
         if (!cancelled) setProperties(hydrated);
       } catch (loadError) {
         if (!cancelled) setError(loadError.shortMessage || loadError.message || 'Unable to load on-chain properties');
       } finally {
+        isLoadingRef.current = false;
         if (!cancelled) setIsLoading(false);
       }
     }
@@ -142,7 +210,7 @@ export function useProperties() {
     return () => {
       cancelled = true;
     };
-  }, [publicClient, address, refreshIndex]);
+  }, [publicClient, address, cacheKey, refreshIndex]);
 
   return { properties, isLoading, error, refresh };
 }
