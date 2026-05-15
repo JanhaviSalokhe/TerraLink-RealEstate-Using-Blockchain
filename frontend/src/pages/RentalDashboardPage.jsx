@@ -5,7 +5,7 @@ import { StatCard } from '../components/dashboard/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
 import { Button } from '../components/ui/button';
-import { formatCurrency, shortAddress } from '../lib/utils';
+import { formatCurrency, formatTokenAmount, shortAddress } from '../lib/utils';
 import { EmptyState } from '../components/ui/empty-state';
 import { useProperties } from '../hooks/useProperties';
 import { useProtocolActions } from '../hooks/useProtocolActions';
@@ -15,6 +15,10 @@ import toast from 'react-hot-toast';
 
 function sameAddress(left = '', right = '') {
   return Boolean(left && right && left.toLowerCase() === right.toLowerCase());
+}
+
+function rentalTotalDue(rental) {
+  return (rental?.rentAmount || 0n) + (rental?.securityDeposit || 0n);
 }
 
 export function RentalDashboardPage() {
@@ -46,7 +50,7 @@ export function RentalDashboardPage() {
   }
 
   function acceptRental(property) {
-    const totalDue = Number(property.rent || 0) + Number(property.rental?.securityDeposit || 0n) / 1e6;
+    const totalDue = rentalTotalDue(property.rental);
     return runRentalAction(async () => {
       await actions.approveRental(totalDue);
       return actions.acceptRentalAgreement(property.id);
@@ -55,7 +59,7 @@ export function RentalDashboardPage() {
 
   function payRent(property) {
     return runRentalAction(async () => {
-      await actions.approveRental(property.rent);
+      await actions.approveRental(property.rental?.rentAmount || 0n);
       return actions.payRent(property.id);
     }, 'Rent payment confirmed');
   }
@@ -112,8 +116,8 @@ export function RentalDashboardPage() {
                   <Progress value={activeAgreement ? 100 : 35} />
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-xl bg-white/[.05] p-3"><p className="font-bold">{formatCurrency(property.rent, true)}</p><p className="text-xs text-slate-500">Rent</p></div>
-                  <div className="rounded-xl bg-white/[.05] p-3"><p className="font-bold">{formatCurrency(Number(property.rental.securityDeposit || 0n) / 1e6, true)}</p><p className="text-xs text-slate-500">Deposit</p></div>
+                  <div className="rounded-xl bg-white/[.05] p-3"><p className="font-bold">{formatCurrency(formatTokenAmount(property.rental.rentAmount), true)}</p><p className="text-xs text-slate-500">Rent</p></div>
+                  <div className="rounded-xl bg-white/[.05] p-3"><p className="font-bold">{formatCurrency(formatTokenAmount(property.rental.securityDeposit), true)}</p><p className="text-xs text-slate-500">Deposit</p></div>
                   <div className="rounded-xl bg-white/[.05] p-3"><p className="font-bold">{activeAgreement ? new Date(nextDue * 1000).toLocaleDateString() : 'Open'}</p><p className="text-xs text-slate-500">Next due</p></div>
                 </div>
                 <div className="grid gap-2 rounded-xl bg-white/[.035] p-3 text-xs text-slate-400">

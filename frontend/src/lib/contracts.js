@@ -114,6 +114,13 @@ export const propertyNftAbi = [
 
 export const marketplaceAbi = [
   {
+    type: 'function',
+    name: 'paymentToken',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
     type: 'event',
     name: 'PropertyListed',
     inputs: [
@@ -198,6 +205,13 @@ export const marketplaceAbi = [
 
 export const rentalEscrowAbi = [
   {
+    type: 'function',
+    name: 'paymentToken',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
     type: 'event',
     name: 'RentalAgreementCreated',
     inputs: [
@@ -281,6 +295,13 @@ export const rentalEscrowAbi = [
 ];
 
 export const fractionalInvestmentAbi = [
+  {
+    type: 'function',
+    name: 'paymentToken',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
   {
     type: 'event',
     name: 'FractionalInvestmentEnabled',

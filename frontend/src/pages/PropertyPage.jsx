@@ -80,6 +80,10 @@ export function PropertyPage() {
     property.hasRental && { type: 'Rental agreement', hash: `Tenant ${shortAddress(property.rental.tenant)}`, value: formatCurrency(property.rent), time: property.rental.active ? 'Active' : 'Open' },
   ].filter(Boolean);
 
+  const rentalTotalDue = property.hasRental
+    ? property.rental.rentAmount + property.rental.securityDeposit
+    : 0n;
+
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 pb-16 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
       <div className="space-y-6">
@@ -152,7 +156,7 @@ export function PropertyPage() {
             <div className="grid gap-3">
               {property.isListed && <Button variant="outline" onClick={() => runAction(() => approveMarketplace(property.price))}>Approve {formatCurrency(property.price)} mUSDT</Button>}
               {property.isListed && <Button onClick={() => runAction(() => buyProperty(property.id))}><Building2 className="h-4 w-4" />Buy NFT</Button>}
-              {property.hasRental && !property.rental.active && <Button variant="secondary" onClick={() => runAction(async () => { await approveRental(property.rent + Number(property.rental.securityDeposit || 0n) / 1e6); return acceptRentalAgreement(property.id); })}><CalendarClock className="h-4 w-4" />Accept Rental Escrow</Button>}
+              {property.hasRental && !property.rental.active && <Button variant="secondary" onClick={() => runAction(async () => { await approveRental(rentalTotalDue); return acceptRentalAgreement(property.id); })}><CalendarClock className="h-4 w-4" />Accept Rental Escrow</Button>}
               {property.hasPool && <Button variant="outline" onClick={investCustomAmount}><TrendingUp className="h-4 w-4" />Invest</Button>}
               {property.hasPool && <Button variant="secondary" onClick={() => runAction(() => claimFractionalPayout(property.id))} disabled={!property.viewerPendingPayout}>Claim {formatCurrency(property.viewerPendingPayout || 0, true)}</Button>}
               {property.hasPool && isOwner && <Button variant="outline" onClick={depositRentalIncome}>Deposit Rental Income</Button>}
