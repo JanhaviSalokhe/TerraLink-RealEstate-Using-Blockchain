@@ -290,30 +290,3 @@ export function useOwnedProperties() {
   return { ...result, properties: ownedProperties, allProperties: result.properties };
 }
 
-async function getPropertyEventsByTokenScan(publicClient) {
-  const events = [];
-
-  for (let tokenId = 1; tokenId <= FALLBACK_PROPERTY_SCAN_LIMIT; tokenId += 1) {
-    const tokenIdBigInt = BigInt(tokenId);
-    const propertyResult = await safeRead(publicClient, {
-      address: contracts.propertyNFT,
-      abi: propertyNftAbi,
-      functionName: 'getProperty',
-      args: [tokenIdBigInt],
-    });
-
-    if (!propertyResult) continue;
-
-    const chainProperty = propertyResult[0];
-    events.push({
-      args: {
-        tokenId: tokenIdBigInt,
-        creator: chainProperty.creator,
-        metadataURI: propertyResult[1],
-        timestamp: chainProperty.createdAt,
-      },
-    });
-  }
-
-  return events;
-}
